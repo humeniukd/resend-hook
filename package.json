@@ -9,12 +9,11 @@
 		"cf-typegen": "wrangler types"
 	},
 	"devDependencies": {
-		"@cloudflare/vitest-pool-workers": "^0.8.19",
-		"@types/node": "^24.9.1",
-		"typescript": "^5.5.2",
-		"wrangler": "^4.45.0"
+		"@types/node": "^24",
+		"typescript": "^7",
+		"wrangler": "^4"
 	},
 	"dependencies": {
-		"resend": "^6.3.0-canary.4"
+		"resend": "^6"
 	}
 }

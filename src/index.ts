@@ -1,10 +1,11 @@
 import {
 	CreateEmailOptions,
-	GetInboundEmailResponse,
+	GetReceivingEmailResponse,
 	ListAttachmentsResponse,
 	Resend,
 	WebhookEvent
 } from 'resend';
+import { Buffer } from 'node:buffer';
 
 export interface Payload {
 	created_at: string;
@@ -24,30 +25,26 @@ export default {
 		const resend = new Resend(env.RESEND_API_KEY);
 		const event: Payload = await request.json();
 		const empty = Response.json({});
+		const addresses = env.FORWARD_ADDRESSES.split(',');
 
 		if (event.type === 'email.received') {
 
-			const inboundEmail: GetInboundEmailResponse  = await resend.emails.receiving.get(event.data.email_id);
+			let { data: email, error: receivingError }: GetReceivingEmailResponse  = await resend.emails.receiving.get(event.data.email_id);
 
-			if (inboundEmail.error) {
-				console.error('GetInboundEmail error', inboundEmail.error)
+			if (receivingError) {
+				console.error('GetInboundEmail error', receivingError)
 				return empty;
 			}
 
-			const { data: email } = inboundEmail;
+			const { data: attachments, error: attachmentsError }: ListAttachmentsResponse = await resend.emails.receiving.attachments.list({ emailId: event.data.email_id, limit: 10 });
 
-			const listAttachments: ListAttachmentsResponse = await resend.attachments.receiving.list({ emailId: event.data.email_id });
-
-			if (listAttachments.error) {
-				console.error('ListAttachments error', listAttachments.error)
-			}
-
-			const { data: attachments } = listAttachments;
+			if (attachmentsError)
+				console.error('ListAttachments error', attachmentsError)
 
 			const options = {
 				from: env.FROM_ADDRESS,
 				replyTo: event.data.from,
-				to: [env.FORWARD_ADDRESS],
+				to: addresses.map(address => `${event.data.to}<${address}>`),
 				subject: event.data.subject,
 			} as CreateEmailOptions;
 
@@ -57,18 +54,20 @@ export default {
 
 			options.attachments = [];
 
-			if (attachments?.data)
-				// download the attachments and encode them in base64
+			if (Array.isArray(attachments?.data))
 				for (const attachment of attachments.data) {
 					try {
+
 						const response = await fetch(attachment.download_url);
 						const buffer = Buffer.from(await response.arrayBuffer());
+
 						options.attachments.push({
 							...attachment,
-							content: buffer.toString('base64')
-						})
+							content: buffer
+						});
+
 					} catch (e) {
-						console.error(`failed to fetch attachment ${attachment.download_url}`, e)
+						console.error('failed to fetch attachment:', (e as Error).message);
 					}
 				}
 
